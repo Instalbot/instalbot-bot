@@ -1,5 +1,7 @@
 from playwright.sync_api import sync_playwright
-import time, psycopg2
+import time, psycopg2, sys
+
+sys.stdout.reconfigure(encoding='utf-8')
 
 connection = psycopg2.connect(
     host="127.0.0.1",
@@ -25,11 +27,13 @@ with sync_playwright() as playwright:
     except:
         page.locator('//*[@id="continue_session_button"]').click(force=True)
 
+    page.set_default_navigation_timeout(0)
+    cursor = connection.cursor()
+
     while True:
         page.wait_for_load_state("networkidle")
+        time.sleep(1)
         try:
-            page.locator('//*[@id="know_new"]').click(force=True)
-        except:
             try:
                 page.wait_for_load_state("networkidle")
                 word = page.locator('//*[@id="question"]/div[2]/div[2]').text_content()
@@ -37,11 +41,23 @@ with sync_playwright() as playwright:
             except:
                 print("No more words")
                 break
-            page.locator('//*[@id="answer"]').fill()
-            page.locator('//*[@id="check"]').click()
+            page.wait_for_load_state("networkidle")
+            print("1")
+            cursor.execute(f"SELECT de FROM words WHERE pl = '{word}'")
+            result = cursor.fetchone()
+            print(result)
+            page.locator('//*[@id="answer"]').fill(result[0])
+            #page.locator('//*[@id="check"]').click()
 
             break
-            
-    page.screenshot(path="example.png")
+        except:
+            page.locator('//*[@id="know_new"]').click(force=True)
+
+
+    cursor.close()
+    connection.close()
+
     time.sleep(2)
+    page.screenshot(path="example.png")
+    time.sleep(10)
     browser.close()
