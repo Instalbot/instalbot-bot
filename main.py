@@ -12,13 +12,18 @@ connection = psycopg2.connect(
 )
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=True)
     page = browser.new_page()
     page.goto("https://instaling.pl/teacher.php?page=login")
+
 
     page.locator('//*[@id="log_email"]').fill("")
     page.locator('//*[@id="log_password"]').fill("")
     page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
+    if page.url == "https://instaling.pl/teacher.php?page=login":
+        print("Wrong password")
+        sys.exit()
+        browser.close()
 
     page.locator('//*[@id="student_panel"]/p[1]/a').click()
     page.wait_for_load_state("networkidle")
@@ -42,14 +47,11 @@ with sync_playwright() as playwright:
                 print("No more words")
                 break
             page.wait_for_load_state("networkidle")
-            print("1")
             cursor.execute(f"SELECT de FROM words WHERE pl = '{word}'")
             result = cursor.fetchone()
-            print(result)
             page.locator('//*[@id="answer"]').fill(result[0])
-            #page.locator('//*[@id="check"]').click()
-
-            break
+            page.locator('//*[@id="check"]').click()
+            page.locator('//*[@id="nextword"]').click()
         except:
             page.locator('//*[@id="know_new"]').click(force=True)
 
@@ -57,7 +59,7 @@ with sync_playwright() as playwright:
     cursor.close()
     connection.close()
 
-    time.sleep(2)
+    time.sleep(1)
     page.screenshot(path="example.png")
-    time.sleep(10)
+    time.sleep(5)
     browser.close()
