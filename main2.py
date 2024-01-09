@@ -1,5 +1,5 @@
-from playwright.sync_api import sync_playwright
-import time, psycopg2, sys
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import time, psycopg2, sys, json
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -10,6 +10,8 @@ connection = psycopg2.connect(
     user="host",
     password="1234"
 )
+
+userId = 1
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
@@ -30,18 +32,23 @@ with sync_playwright() as playwright:
 
     page.set_default_navigation_timeout(0)
     page.wait_for_load_state("networkidle")
+    time.sleep(1)
     cursor = connection.cursor()
-    #cursor.execute("DROP TABLE words")
-    cursor.execute("CREATE TABLE IF NOT EXISTS words (pl TEXT NOT NULL, de TEXT NOT NULL)")
+
+    data = []
     tr = 1
     while True:
-        word_pl = page.locator(f'//*[@id="assigned_words"]/tr[{tr}]/td[1]').inner_text(timeout=0)
-        word_de = page.locator(f'//*[@id="assigned_words"]/tr[{tr}]/td[2]').inner_text(timeout=0)
-        if word_pl == [] or word_de == []:
+        try:
+            word_de = page.locator(f'//*[@id="assigned_words"]/tr[{tr}]/td[1]').inner_text(timeout=100)
+            word_pl = page.locator(f'//*[@id="assigned_words"]/tr[{tr}]/td[2]').inner_text(timeout=100)
+        except PlaywrightTimeoutError:
             break
         print(f"{word_pl} : {word_de}")
-        cursor.execute("INSERT INTO words (pl, de) VALUES (%s, %s);", (word_de, word_pl))
+        data.append({"key": word_pl, "value": word_de})
         tr += 1
+
+    json_data = json.dumps(data, ensure_ascii=False)
+    cursor.execute("INSERT INTO words(userId, list) VALUES(%s, %s);", (userId, json_data))
 
     cursor.close()
     connection.commit()

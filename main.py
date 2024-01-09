@@ -11,6 +11,9 @@ connection = psycopg2.connect(
     password="1234"
 )
 
+userId = 1
+truthtable = {}
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page()
@@ -34,6 +37,12 @@ with sync_playwright() as playwright:
 
     page.set_default_navigation_timeout(0)
     cursor = connection.cursor()
+    cursor.execute(f"SELECT elems->'key' as key, elems->'value' as value FROM words, json_array_elements(list) AS elems WHERE userid = %s", (userId, ))
+    result = cursor.fetchall()
+    cursor.close()
+
+    for row in result:
+        truthtable[row[0]] = row[1]
 
     while True:
         page.wait_for_load_state("networkidle")
@@ -41,15 +50,18 @@ with sync_playwright() as playwright:
         try:
             try:
                 page.wait_for_load_state("networkidle")
-                word = page.locator('//*[@id="question"]/div[2]/div[2]').text_content()
-                print(word)
+                word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text()
             except:
                 print("No more words")
                 break
             page.wait_for_load_state("networkidle")
-            cursor.execute(f"SELECT de FROM words WHERE pl = '{word}'")
-            result = cursor.fetchone()
-            page.locator('//*[@id="answer"]').fill(result[0])
+            try:
+                print(f"{word} : {truthtable[word]}")
+                result = truthtable[word]
+            except KeyError:
+                print("No word")
+                break
+            page.locator('//*[@id="answer"]').fill(result)
             page.locator('//*[@id="check"]').click()
             page.locator('//*[@id="nextword"]').click()
         except:
