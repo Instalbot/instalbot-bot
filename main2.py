@@ -4,22 +4,24 @@ import time, psycopg2, sys, json
 sys.stdout.reconfigure(encoding='utf-8')
 
 connection = psycopg2.connect(
-    host="127.0.0.1",
-    port="5432",
-    database="sraka",
-    user="host",
-    password="1234"
+    host="",
+    port="",
+    database="",
+    user="",
+    password=""
 )
 
-userId = 1
+userId = 6
+instaling_user = ""
+instaling_password = ""
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page()
     page.goto("https://instaling.pl/teacher.php?page=login")
 
-    page.locator('//*[@id="log_email"]').fill("")
-    page.locator('//*[@id="log_password"]').fill("")
+    page.locator('//*[@id="log_email"]').fill(instaling_user)
+    page.locator('//*[@id="log_password"]').fill(instaling_password)
     page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
     if page.url == "https://instaling.pl/teacher.php?page=login":
         print("Wrong password")
@@ -48,7 +50,7 @@ with sync_playwright() as playwright:
         tr += 1
 
     json_data = json.dumps(data, ensure_ascii=False)
-    cursor.execute("INSERT INTO words(userId, list) VALUES(%s, %s);", (userId, json_data))
+    cursor.execute("INSERT INTO words(userId, list) VALUES(%s, %s) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", (userId, json_data))
 
     cursor.close()
     connection.commit()

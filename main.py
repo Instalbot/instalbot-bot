@@ -1,27 +1,33 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
 import time, psycopg2, sys
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 connection = psycopg2.connect(
-    host="127.0.0.1",
-    port="5432",
-    database="sraka",
-    user="host",
-    password="1234"
+    host="",
+    port="",
+    database="",
+    user="",
+    password=""
 )
 
-userId = 1
-truthtable = {}
+userId = 6
+instaling_user = ""
+instaling_password = ""
 
-with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=True)
+cursor = connection.cursor()
+cursor.execute("SELECT todo FROM flags WHERE userId = %s", (userId,))
+result = cursor.fetchone()
+if result is not None and result[0] == "False":
+    sys.exit()
+
+def main(playwright: Playwright, userId) -> None:
+    browser = playwright.chromium.launch(headless=False)
     page = browser.new_page()
     page.goto("https://instaling.pl/teacher.php?page=login")
 
-
-    page.locator('//*[@id="log_email"]').fill("")
-    page.locator('//*[@id="log_password"]').fill("")
+    page.locator('//*[@id="log_email"]').fill(instaling_user)
+    page.locator('//*[@id="log_password"]').fill(instaling_password)
     page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
     if page.url == "https://instaling.pl/teacher.php?page=login":
         print("Wrong password")
@@ -36,10 +42,9 @@ with sync_playwright() as playwright:
         page.locator('//*[@id="continue_session_button"]').click(force=True)
 
     page.set_default_navigation_timeout(0)
-    cursor = connection.cursor()
-    cursor.execute(f"SELECT elems->'key' as key, elems->'value' as value FROM words, json_array_elements(list) AS elems WHERE userid = %s", (userId, ))
+    truthtable = {}
+    cursor.execute("SELECT elems->'key' as key, elems->'value' as value FROM words, json_array_elements(list) AS elems WHERE userid = %s", (userId, ))
     result = cursor.fetchall()
-    cursor.close()
 
     for row in result:
         truthtable[row[0]] = row[1]
@@ -50,9 +55,11 @@ with sync_playwright() as playwright:
         try:
             try:
                 page.wait_for_load_state("networkidle")
-                word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text()
+                word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text(timeout=1000)
+            except PlaywrightTimeoutError:
+                break
             except:
-                print("No more words")
+                print("No word")
                 break
             page.wait_for_load_state("networkidle")
             try:
@@ -61,17 +68,21 @@ with sync_playwright() as playwright:
             except KeyError:
                 print("No word")
                 break
-            page.locator('//*[@id="answer"]').fill(result)
+            try:
+                page.locator('//*[@id="answer"]').fill(result, timeout=1000)
+            except PlaywrightTimeoutError:
+                break
             page.locator('//*[@id="check"]').click()
             page.locator('//*[@id="nextword"]').click()
         except:
             page.locator('//*[@id="know_new"]').click(force=True)
 
-
-    cursor.close()
-    connection.close()
-
-    time.sleep(1)
-    page.screenshot(path="example.png")
-    time.sleep(5)
+    cursor.execute("UPDATE flags SET todo = 'False' WHERE userId = %s", (userId,))
     browser.close()
+
+with sync_playwright() as playwright:
+    main(playwright, userId)
+
+
+cursor.close()
+connection.close()
