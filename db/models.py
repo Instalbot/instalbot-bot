@@ -40,6 +40,9 @@ class Flag(Base):
     userid = Column(Integer, ForeignKey('users.userid', ondelete='CASCADE'), primary_key=True)
     todo = Column(Boolean, default=False)
     hoursrange = Column(NUMRANGE, default='[14, 22]')
+    instaling_user = Column(String(255), default='', nullable=False)
+    instaling_pass = Column(String(255), default='', nullable=False)
+    error_level = Column(Integer, default=5, nullable=False)
 
     def __repr__(self):
         return '<Flag %r>' % self.userid
