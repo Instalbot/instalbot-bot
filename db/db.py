@@ -1,6 +1,7 @@
 from os import getenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
+from sqlalchemy.orm import sessionmaker
 
 url_object = URL.create(
     drivername="postgresql+psycopg",
@@ -10,6 +11,8 @@ url_object = URL.create(
     database=getenv("DATABASE_NAME"),
 )
 
-engine = create_engine(url_object, echo=True)
+engine = create_engine(url_object)
+
+Session = sessionmaker(bind=engine)
 
 from . import models
