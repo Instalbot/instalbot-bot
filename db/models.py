@@ -5,6 +5,7 @@ from sqlalchemy import Integer, DateTime, String, Column, Boolean, ForeignKey
 
 Base = declarative_base()
 
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -51,7 +52,10 @@ class Flag(Base):
         return {
             'userid': self.userid,
             'todo': self.todo,
-            'hoursrange': self.hoursrange
+            'hoursrange': self.hoursrange,
+            'instaling_user': self.instaling_user,
+            'instaling_pass': '',
+            'error_level': self.error_level
         }
 
 
@@ -60,6 +64,7 @@ class Word(Base):
 
     userid = Column(Integer, ForeignKey('users.userid', ondelete='CASCADE'), primary_key=True)
     list = Column(JSON, nullable=False, default=[])
+    active = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return '<Word %r>' % self.userid
@@ -67,6 +72,7 @@ class Word(Base):
     def to_dict(self):
         return {
             'userid': self.userid,
-            'list': self.list
+            'list': self.list,
+            'active': self.active
         }
 
