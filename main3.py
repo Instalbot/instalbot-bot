@@ -26,7 +26,7 @@ def refresh_queue():
             if str(flag.userid) not in keys:
                 now = datetime.now(pytz.timezone('Europe/Warsaw'))
                 timestamp = round(now.timestamp()) - now.minute * 60
-                czas = randint(timestamp, timestamp + (flag.hoursrange.upper - now.hour) * 3600)
+                czas = randint(timestamp, timestamp + (int(flag.hoursrange.upper) - now.hour) * 3600)
                 botQueue[str(flag.userid)] = [flag, czas]
             else:
                 pass
