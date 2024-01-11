@@ -18,7 +18,7 @@ instaling_password = ""
 cursor = connection.cursor()
 cursor.execute("SELECT todo FROM flags WHERE userId = %s", (userId,))
 result = cursor.fetchone()
-if result is not None and result[0] == "False":
+if result is not None and result[0] == "false":
     sys.exit()
 
 def main(playwright: Playwright, userId) -> None:
