@@ -3,6 +3,7 @@ from random import randint
 from dotenv import load_dotenv
 from sqlalchemy import text
 import pytz
+import threading
 
 load_dotenv()
 
@@ -32,7 +33,10 @@ def refresh_queue():
 
 print(botQueue)
 
-# TODO: do it every hour
-# refresh_queue()
+def schedule_refresh():
+    threading.Timer(3600, schedule_refresh).start()
+    refresh_queue()
+
+schedule_refresh()
 
 print(botQueue)
