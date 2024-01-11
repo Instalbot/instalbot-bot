@@ -1,7 +1,6 @@
 from playwright.sync_api import sync_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
 import time, psycopg2, sys
 
-sys.stdout.reconfigure(encoding='utf-8')
 
 connection = psycopg2.connect(
     host="",
