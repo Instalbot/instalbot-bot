@@ -1,15 +1,14 @@
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-import time, psycopg2, sys, json
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import text, literal
+from dotenv import load_dotenv
+import time, sys, json
 
-sys.stdout.reconfigure(encoding='utf-8')
+load_dotenv()
 
-connection = psycopg2.connect(
-    host="",
-    port="",
-    database="",
-    user="",
-    password=""
-)
+from db import db, models
+
+#TODO: odszyfrowanie hasła i pobiernie hasła i użytkownika z bazy
 
 userId = 6
 instaling_user = ""
@@ -35,7 +34,6 @@ with sync_playwright() as playwright:
     page.set_default_navigation_timeout(0)
     page.wait_for_load_state("networkidle")
     time.sleep(1)
-    cursor = connection.cursor()
 
     data = []
     tr = 1
@@ -50,9 +48,8 @@ with sync_playwright() as playwright:
         tr += 1
 
     json_data = json.dumps(data, ensure_ascii=False)
-    cursor.execute("INSERT INTO words(userId, list) VALUES(%s, %s) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", (userId, json_data))
+    with db.Session() as session:
+        session.query(models.Word).filter_by(userid=userId).update({models.Word.list: literal(json_data).cast(JSONB)}, synchronize_session=False)
+        session.commit()
 
-    cursor.close()
-    connection.commit()
-    connection.close()
     browser.close()

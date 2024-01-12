@@ -1,24 +1,18 @@
 from playwright.sync_api import sync_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
-import time, psycopg2, sys
+from dotenv import load_dotenv
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
+import time, sys
 
+load_dotenv()
 
-connection = psycopg2.connect(
-    host="",
-    port="",
-    database="",
-    user="",
-    password=""
-)
+from db import db, models
+
+#TODO: odszyfrowanie hasła i pobiernie hasła i użytkownika z bazy
 
 userId = 6
 instaling_user = ""
 instaling_password = ""
-
-cursor = connection.cursor()
-cursor.execute("SELECT todo FROM flags WHERE userId = %s", (userId,))
-result = cursor.fetchone()
-if result is not None and result[0] == "false":
-    sys.exit()
 
 def main(playwright: Playwright, userId) -> None:
     browser = playwright.chromium.launch(headless=False)
@@ -41,12 +35,17 @@ def main(playwright: Playwright, userId) -> None:
         page.locator('//*[@id="continue_session_button"]').click(force=True)
 
     page.set_default_navigation_timeout(0)
-    truthtable = {}
-    cursor.execute("SELECT elems->'key' as key, elems->'value' as value FROM words, json_array_elements(list) AS elems WHERE userid = %s", (userId, ))
-    result = cursor.fetchall()
 
-    for row in result:
-        truthtable[row[0]] = row[1]
+    with db.Session() as session:
+        result = session.query(models.Word).filter_by(userid=userId).first()
+        if result is None:
+            print("No words")
+            sys.exit()
+        else:
+            data = result.list
+            truthtable = {}
+            for word in data:
+                truthtable[word["key"]] = word["value"]
 
     while True:
         page.wait_for_load_state("networkidle")
@@ -62,7 +61,6 @@ def main(playwright: Playwright, userId) -> None:
                 break
             page.wait_for_load_state("networkidle")
             try:
-                print(f"{word} : {truthtable[word]}")
                 result = truthtable[word]
             except KeyError:
                 print("No word")
@@ -76,12 +74,7 @@ def main(playwright: Playwright, userId) -> None:
         except:
             page.locator('//*[@id="know_new"]').click(force=True)
 
-    cursor.execute("UPDATE flags SET todo = 'False' WHERE userId = %s", (userId,))
     browser.close()
 
 with sync_playwright() as playwright:
-    main(playwright, userId)
-
-
-cursor.close()
-connection.close()
+   main(playwright, userId)
