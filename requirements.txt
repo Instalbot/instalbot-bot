@@ -1,5 +1,7 @@
 greenlet==3.0.1
 playwright==1.40.0
+psycopg==3.1.17
+psycopg-binary==3.1.17
 pyee==11.0.1
 pyscopg2==66.0.2
 python-dotenv==1.0.0
