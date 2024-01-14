@@ -1,107 +1,73 @@
-import sys
-import time
-
+from datetime import datetime
+from random import randint
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import text, update
+import pytz
+import threading
+import time
 
 load_dotenv()
 
 from db import db, models
 
-username = ""
-password = ""
+botQueue = dict([])
 
-def xor_encryption(text, key):
-    encrypted_text = ""
+def spawn_bot(bot):
+    with db.Session() as session:
+        try:
+            changes = update(models.Flag).where(models.Flag.userid == bot.userid).values(todo=False)
+            session.execute(changes)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            return
 
-    for i in range(len(text)):
-        encrypted_text += chr(ord(text[i]) ^ ord(key[i % len(key)]))
+    print(bot.to_dict())
 
-    return encrypted_text
 
-def main():
-    try:
+def refresh_queue():
+    with db.Session() as session:
+        # Retrieve all flags that are in range of flag's hoursrange
+        result = session.query(models.Flag).filter(
+            text("numeric_add(EXTRACT(HOUR FROM now()), EXTRACT(MINUTE FROM now()) / 60) <@ hoursrange")
+        ).filter_by(todo=True).all()
+        
+        # Insert flags to botQueue
+        keys = botQueue.keys()
 
-        with db.Session() as session:
-            try:
-                flag = session.query(models.Flag).filter_by(userid=user_id).first()
-                global username, password
-                username = flag.instaling_user
-                password = xor_encryption(flag.instaling_pass, os.getenv('INSTALING_KEY'))
-            except Exception as e:
-                print(f"Exception thrown while getting , {e}")
-                session.rollback()
-                return
+        for flag in result:
+            # Generate random time for flag and push it to queue
+            if str(flag.userid) not in keys:
+                now = datetime.now(pytz.timezone('Europe/Warsaw'))
+                timestamp = round(now.timestamp()) - now.minute * 60
+                czas = randint(timestamp, timestamp + (int(flag.hoursrange.upper) - now.hour) * 3600)
+                botQueue[str(flag.userid)] = [flag, czas]
+            else:
+                pass
 
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
-            page = browser.new_page()
-            page.goto("https://instaling.pl/teacher.php?page=login")
 
-            page.locator('//*[@id="log_email"]').fill(username)
-            page.locator('//*[@id="log_password"]').fill(password)
-            page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
-            if page.url == "https://instaling.pl/teacher.php?page=login":
-                return
-                browser.close()
+def schedule_refresh():
+    timer = threading.Timer(1, schedule_refresh)
+    timer.start()
+    refresh_queue()
 
-            page.locator('//*[@id="student_panel"]/p[1]/a').click()
-            page.wait_for_load_state("networkidle")
-            try:
-                page.locator('//*[@id="start_session_button"]').click(force=True)
-            except:
-                page.locator('//*[@id="continue_session_button"]').click(force=True)
 
-            page.set_default_navigation_timeout(0)
+def start_waiter():
+    while True:
+        now = datetime.now(pytz.timezone('Europe/Warsaw'))
+        timestamp = round(now.timestamp()) - now.minute * 60
+        for bot in botQueue.copy():
+            if botQueue[bot][1] > timestamp:
+                thread = threading.Thread(target=spawn_bot, args=(botQueue[bot][0],))
+                thread.start()
+                del botQueue[bot]
+            else:
+                pass
+        time.sleep(1)
 
-            with db.Session() as session:
-                try:
-                    result = session.query(models.Word).filter_by(userid=userId).first()
-                    if result is None:
-                        print("No words")
-                        sys.exit()
-                    else:
-                        data = result.list
-                        truthtable = {}
-                        for word in data:
-                            truthtable[word["key"]] = word["value"]
-                except Exception as e:
-                    print(f"Exception thrown while getting words, {e}")
-                    session.rollback()
-                    return
 
-            while True:
-                page.wait_for_load_state("networkidle")
-                time.sleep(1)
-                try:
-                    try:
-                        page.wait_for_load_state("networkidle")
-                        word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text(timeout=1000)
-                    except PlaywrightTimeoutError:
-                        break
-                    except:
-                        print("No word")
-                        break
-                    page.wait_for_load_state("networkidle")
-                    try:
-                        result = truthtable[word]
-                    except KeyError:
-                        print("No word")
-                        break
-                    try:
-                        page.locator('//*[@id="answer"]').fill(result, timeout=1000)
-                    except PlaywrightTimeoutError:
-                        break
-                    page.locator('//*[@id="check"]').click()
-                    page.locator('//*[@id="nextword"]').click()
-                except:
-                    page.locator('//*[@id="know_new"]').click(force=True)
-
-            browser.close()
-    except Exception as e:
-        print(f"Ups somthing went wrong {e}")
-        return
-
-main(playwright, userId)
+if __name__ == "__main__":
+    refreshing = threading.Thread(target=schedule_refresh)
+    refreshing.start()
+    waiter = threading.Thread(target=start_waiter)
+    waiter.start()
