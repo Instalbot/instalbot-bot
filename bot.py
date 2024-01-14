@@ -12,6 +12,7 @@ from db import db, models
 
 username = ""
 password = ""
+userid = 6
 
 def xor_encryption(text, key):
     encrypted_text = ""
@@ -21,15 +22,16 @@ def xor_encryption(text, key):
 
     return encrypted_text
 
-def main():
+def bot(user_id):
     try:
 
         with db.Session() as session:
             try:
-                flag = session.query(models.Flag).filter_by(userid=user_id).first()
+                flag = session.query(models.Flag).filter_by(userid=userid).first()
                 global username, password
                 username = flag.instaling_user
                 password = xor_encryption(flag.instaling_pass, os.getenv('INSTALING_KEY'))
+
             except Exception as e:
                 print(f"Exception thrown while getting , {e}")
                 session.rollback()
@@ -58,7 +60,7 @@ def main():
 
             with db.Session() as session:
                 try:
-                    result = session.query(models.Word).filter_by(userid=userId).first()
+                    result = session.query(models.Word).filter_by(userid=userid).first()
                     if result is None:
                         print("No words")
                         sys.exit()
@@ -104,4 +106,4 @@ def main():
         print(f"Ups somthing went wrong {e}")
         return
 
-main(playwright, userId)
+bot(userid)
