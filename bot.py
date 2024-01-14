@@ -22,7 +22,7 @@ def xor_encryption(text, key):
 
     return encrypted_text
 
-def bot(user_id):
+def main(userid):
     try:
 
         with db.Session() as session:
@@ -106,4 +106,4 @@ def bot(user_id):
         print(f"Ups somthing went wrong {e}")
         return
 
-bot(userid)
+#bot(userid)

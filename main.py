@@ -9,8 +9,12 @@ import time
 load_dotenv()
 
 from db import db, models
+import bot
 
 botQueue = dict([])
+userid = 0
+
+bot = bot.main(userid)
 
 def spawn_bot(bot):
     with db.Session() as session:
@@ -64,7 +68,6 @@ def start_waiter():
             else:
                 pass
         time.sleep(1)
-
 
 if __name__ == "__main__":
     refreshing = threading.Thread(target=schedule_refresh)
