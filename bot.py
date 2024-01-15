@@ -1,5 +1,7 @@
 import sys
 import time
+import random
+import os
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
@@ -12,7 +14,7 @@ from db import db, models
 
 username = ""
 password = ""
-userid = 6
+userid = 0
 
 def xor_encryption(text, key):
     encrypted_text = ""
@@ -31,7 +33,7 @@ def main(userid):
                 global username, password
                 username = flag.instaling_user
                 password = xor_encryption(flag.instaling_pass, os.getenv('INSTALING_KEY'))
-
+                error_level = flag.error_level
             except Exception as e:
                 print(f"Exception thrown while getting , {e}")
                 session.rollback()
@@ -63,12 +65,13 @@ def main(userid):
                     result = session.query(models.Word).filter_by(userid=userid).first()
                     if result is None:
                         print("No words")
-                        sys.exit()
+                        return
                     else:
                         data = result.list
                         truthtable = {}
                         for word in data:
                             truthtable[word["key"]] = word["value"]
+
                 except Exception as e:
                     print(f"Exception thrown while getting words, {e}")
                     session.rollback()
@@ -80,22 +83,28 @@ def main(userid):
                 try:
                     try:
                         page.wait_for_load_state("networkidle")
-                        word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text(timeout=1000)
+                        word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text(timeout=2000)
                     except PlaywrightTimeoutError:
                         break
                     except:
                         print("No word")
                         break
                     page.wait_for_load_state("networkidle")
+
                     try:
                         result = truthtable[word]
                     except KeyError:
-                        print("No word")
+                        print("No word in database")
                         break
+
                     try:
-                        page.locator('//*[@id="answer"]').fill(result, timeout=1000)
+                        if random.randint(0, 100) < error_level:
+                            pass #zostawia puste pole
+                        else:
+                            page.locator('//*[@id="answer"]').fill(result, timeout=1000)
                     except PlaywrightTimeoutError:
                         break
+
                     page.locator('//*[@id="check"]').click()
                     page.locator('//*[@id="nextword"]').click()
                 except:
@@ -106,4 +115,4 @@ def main(userid):
         print(f"Ups somthing went wrong {e}")
         return
 
-#bot(userid)
+main(userid)
