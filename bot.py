@@ -83,6 +83,14 @@ def main(userid):
                 try:
                     try:
                         page.wait_for_load_state("networkidle")
+                        page.locator('//*[@id="know_new"]').click(force=True)
+                        page.wait_for_load_state("networkidle")
+                        page.locator('//*[@id="skip"]').click(force=True)
+                    except:
+                        pass
+
+                    try:
+                        page.wait_for_load_state("networkidle")
                         word = page.locator('//*[@id="question"]/div[2]/div[2]').inner_text(timeout=2000)
                     except PlaywrightTimeoutError:
                         break
