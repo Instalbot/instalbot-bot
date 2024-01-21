@@ -14,7 +14,7 @@ from db import db, models
 
 username = ""
 password = ""
-userid = 0
+userid = 1
 
 def xor_encryption(text, key):
     encrypted_text = ""
@@ -48,8 +48,7 @@ def main(userid):
             page.locator('//*[@id="log_password"]').fill(password)
             page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
             if page.url == "https://instaling.pl/teacher.php?page=login":
-                return
-                browser.close()
+                return browser.close()
 
             page.locator('//*[@id="student_panel"]/p[1]/a').click()
             page.wait_for_load_state("networkidle")
@@ -86,6 +85,7 @@ def main(userid):
                         page.locator('//*[@id="know_new"]').click(force=True)
                         page.wait_for_load_state("networkidle")
                         page.locator('//*[@id="skip"]').click(force=True)
+                        continue
                     except:
                         pass
 
@@ -102,6 +102,7 @@ def main(userid):
                     try:
                         result = truthtable[word]
                     except KeyError:
+                        print(word)
                         print("No word in database")
                         break
 

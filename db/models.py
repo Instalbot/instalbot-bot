@@ -64,7 +64,6 @@ class Word(Base):
 
     userid = Column(Integer, ForeignKey('users.userid', ondelete='CASCADE'), primary_key=True)
     list = Column(JSON, nullable=False, default=[])
-    active = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return '<Word %r>' % self.userid
@@ -73,6 +72,5 @@ class Word(Base):
         return {
             'userid': self.userid,
             'list': self.list,
-            'active': self.active
         }
 
