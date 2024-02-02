@@ -44,6 +44,11 @@ def main(userid):
             page = browser.new_page()
             page.goto("https://instaling.pl/teacher.php?page=login")
 
+            try:
+                page.locator('xpath=/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/button[1]').click(timeout = 5000)
+            except:
+                pass
+
             page.locator('//*[@id="log_email"]').fill(username)
             page.locator('//*[@id="log_password"]').fill(password)
             page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
