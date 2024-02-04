@@ -91,7 +91,8 @@ async function startBot(userId: number) {
 
     try {
         browser = await chromium.launch({
-            headless: false
+            headless: false,
+            args: ["--mute-audio"]
         });
     } catch(err) {
         return logger.error(`startBot(): Cannot spawn browser: ${(err as Error).message}`);
@@ -231,7 +232,7 @@ async function startBot(userId: number) {
         try {
             await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
         } catch(err) {
-            logger.error(`Cannot press "next_word" for session ${userId}`);
+            logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
             break;
         }
     }
