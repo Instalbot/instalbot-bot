@@ -2,7 +2,7 @@
   "name": "instalbot-bot",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,6 +10,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "playwright": "^1.41.1"
+    "dotenv": "^16.4.1",
+    "pg": "^8.11.3",
+    "playwright": "^1.41.1",
+    "redis": "^4.6.12",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@types/pg": "^8.11.0"
   }
 }
