@@ -91,7 +91,7 @@ async function startBot(userId: number) {
 
     try {
         browser = await chromium.launch({
-            headless: false,
+            headless: true,
             args: ["--mute-audio"]
         });
     } catch(err) {
@@ -106,7 +106,11 @@ async function startBot(userId: number) {
 
     const page = await context.newPage();
 
-    await page.goto("https://instaling.pl/teacher.php?page=login");
+    try {
+        await page.goto("https://instaling.pl/teacher.php?page=login", { timeout: 60000 });
+    } catch(err) {
+        return logger.error("Cannot enter instaling.pl");
+    }
 
     await page.waitForLoadState("domcontentloaded");
 
@@ -140,6 +144,8 @@ async function startBot(userId: number) {
 
     // --[ SESSION LOGIC ]------------------------------------------------------
 
+    logger.log(`startBot(): Logged in as ${userData.instaling_user} (${userId})`);
+
     await sleep(random(600, 1200));
 
     try {
@@ -164,6 +170,8 @@ async function startBot(userId: number) {
 
     await sleep(random(500, 2000));
 
+    logger.log(`startBot(): Started session for user ${userData.instaling_user} (${userId})`);
+
     try {
         await page.locator('//*[@id="start_session_button"]').click();
     } catch(errP) {
@@ -185,6 +193,8 @@ async function startBot(userId: number) {
     } = {};
 
     userData.list.forEach((x) => (truthTable[x.key] = x.value));
+    
+    let iterations = 0;
 
     while (true) {
         await sleep(random(500, 1000));
@@ -213,10 +223,17 @@ async function startBot(userId: number) {
         }
 
         const word = await page.locator('//*[@id="question"]/div[2]/div[2]').innerHTML();
-        const translation = truthTable[word];
+        const translation = truthTable[word.trim()].trim();
 
-        if (!translation)
-            break;
+        logger.log(`startBot(): '${word.trim()}' - '${translation}' (${userId})`);
+
+        if (!translation) {
+            iterations++;
+            if (iterations >= 5) {
+                break;
+            }
+            continue;            
+        }
 
         try {
             await page.locator('//*[@id="answer"]').pressSequentially(translation, { timeout: 60000, delay: random(230, 400) });
@@ -241,6 +258,6 @@ async function startBot(userId: number) {
     await browser.close();
 }
 
-for(let i = 1; i <= 3; i++) {
+for(let i = 1; i <= 4; i++) {
     startBot(i);
 }
