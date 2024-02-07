@@ -236,14 +236,15 @@ async function startBot(userId: number) {
         }
 
         try {
-            await page.locator('//*[@id="answer"]').pressSequentially(translation, { timeout: 60000, delay: random(230, 400) });
+            await page.locator('//*[@id="answer"]').pressSequentially(translation, { timeout: 120000, delay: random(230, 800) });
+            await sleep(random(500, 1000));
             await page.locator('//*[@id="check"]').click();
         } catch(err) {
             logger.error(`startBot(): Couldn't fill or skip word "${translation} (${word})" for session ${userId}`);
             continue;
         }
 
-        await sleep(random(500, 1000));
+        await sleep(random(500, 2000));
         await page.waitForLoadState("domcontentloaded");
 
         try {
