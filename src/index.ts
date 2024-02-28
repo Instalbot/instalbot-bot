@@ -60,6 +60,8 @@ async function startBot(userId: number) {
     if (!process.env.INSTALING_KEY)
         return logger.error(`startBot(): Master key not set, killing`);
 
+    logger.log(`startBot(): working ${userId}`);
+
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
     let client;
@@ -70,6 +72,8 @@ async function startBot(userId: number) {
         return logger.error(`startBot(): Cannot connect to database: ${(err as Error).message}`)
     }
 
+    logger.log(`startBot(): bot connected to db for user ${userId}`);
+    
     let res;
 
     try {
@@ -77,6 +81,8 @@ async function startBot(userId: number) {
     } catch(err) {
         return logger.error(`startBot(): Cannot query database: ${(err as Error).message}`);
     }
+
+    logger.log(`startBot(): SQL query executed for user ${userId}`);
 
     const userData: DatabaseUserRes | undefined = res.rows[0];
 
@@ -189,10 +195,19 @@ async function startBot(userId: number) {
     await page.waitForLoadState("domcontentloaded");
 
     const truthTable: {
-        [key: string]: string
+        [key: string]: string | string[]
     } = {};
 
-    userData.list.forEach((x) => (truthTable[x.key] = x.value));
+    userData.list.forEach((x) => {
+        if (truthTable[x.key]) {
+            const value = truthTable[x.key];
+            if (typeof(value) == "string")
+                truthTable[x.key] = [value, x.value];
+            else if (typeof(value) == "object")
+                // @ts-ignore
+                truthTable[x.key].push(x.value); 
+        } else truthTable[x.key] = x.value
+    });
     
     let iterations = 0;
 
@@ -223,7 +238,10 @@ async function startBot(userId: number) {
         }
 
         const word = await page.locator('//*[@id="question"]/div[2]/div[2]').innerHTML();
-        const translation = truthTable[word.trim()].trim();
+        let translation = truthTable[word.trim()];
+
+        if (typeof(translation) == "object")
+            translation = translation[Math.floor(Math.random() * translation.length)];
 
         logger.log(`startBot(): '${word.trim()}' - '${translation}' (${userId})`);
 
@@ -259,6 +277,11 @@ async function startBot(userId: number) {
     await browser.close();
 }
 
-for(let i = 1; i <= 4; i++) {
-    startBot(i);
+for(let i = 1; i <= 15; i++) {
+   startBot(i);
 }
+
+//startBot(8);
+//startBot(10);
+
+//startBot(5)
