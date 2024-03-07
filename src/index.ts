@@ -56,6 +56,17 @@ function random(min: number, max: number) {
     return Math.floor(Math.random() * (max - min) + min);
 };
 
+function replaceDomElement(text: string): string {
+    const replaceWith = { " ": " ", "&nbsp;": " ", "&amp;": '&', "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#039;": "'"};
+
+    Object.keys(replaceWith).map(key => {
+        // @ts-ignore
+        text = text.replace(new RegExp(key, "g"), replaceWith[key]);
+    });
+
+    return text;
+}
+
 async function startBot(userId: number) {
     if (!process.env.INSTALING_KEY)
         return logger.error(`startBot(): Master key not set, killing`);
@@ -237,11 +248,35 @@ async function startBot(userId: number) {
             logger.error(`startBot(): Cannot handle "Czy znasz już to słówko?": ${(err as Error).message}`)
         }
 
-        const word = await page.locator('//*[@id="question"]/div[2]/div[2]').innerHTML();
+        let word = await page.locator('//*[@id="question"]/div[2]/div[2]').innerHTML();
+        
+        word = replaceDomElement(word.trim());
+        
         let translation = truthTable[word.trim()];
 
         if (typeof(translation) == "object")
             translation = translation[Math.floor(Math.random() * translation.length)];
+
+        if (translation === undefined) {
+            await page.locator('//*[@id="check"]').click();
+
+            await sleep(500);
+            await page.waitForLoadState("domcontentloaded");
+
+            let newTranslation = await page.locator('xpath=/html/body/div/div[9]/div[1]/div[2]').innerHTML();
+            newTranslation = replaceDomElement(newTranslation.trim());
+            logger.log(`Found word outside of list: "${newTranslation}"`);
+            truthTable[word.trim()] = newTranslation.trim();
+    
+            try {
+                await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
+            } catch(err) {
+                logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
+                break;
+            }
+
+            continue;            
+        }
 
         logger.log(`startBot(): '${word.trim()}' - '${translation}' (${userId})`);
 
@@ -277,9 +312,12 @@ async function startBot(userId: number) {
     await browser.close();
 }
 
-for(let i = 1; i <= 15; i++) {
-   startBot(i);
-}
+//for(let i = 7; i <= 13; i++) {
+//   startBot(i);
+//}
+
+
+startBot(13);
 
 //startBot(8);
 //startBot(10);
