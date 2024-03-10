@@ -1,10 +1,13 @@
-import { devices, chromium, Browser } from "playwright";
+import { devices, chromium, Browser, BrowserContext } from "playwright";
 import { Pool } from "pg";
+import amqp from "amqplib";
 import dotenv from "dotenv";
 
 import logger from "./logger";
 
 dotenv.config();
+
+//--[ TYPES ]-------------------------------------------------------------------
 
 export interface DatabaseUserRes {
     userid:         number;
@@ -25,14 +28,39 @@ export interface List {
     value: string;
 };
 
-const pool = new Pool({
-    user: process.env.DATABASE_USERNAME,
-    password: process.env.DATABASE_PASSWORD,
-    host: process.env.DATABASE_HOST,
-    database: process.env.DATABASE_NAME
-});
+//--[ ENV ]---------------------------------------------------------------------
 
-function xorEncryption(text: string, key: string): string {
+const env = process.env as {
+    DATABASE_USERNAME: string,
+    DATABASE_PASSWORD: string,
+    DATABASE_HOST:     string,
+    DATABASE_NAME:     string,
+    INSTALING_KEY:     string,
+    RABBITMQ_USERNAME: string,
+    RABBITMQ_PASSWORD: string,
+    RABBITMQ_HOST:     string
+};
+
+const envKeys = Object.keys(env);
+let requiredKeys = [
+    "DATABASE_USERNAME",
+    "DATABASE_PASSWORD",
+    "DATABASE_HOST",
+    "DATABASE_NAME",
+    "INSTALING_KEY",
+    "RABBITMQ_HOST",
+    "RABBITMQ_USERNAME",
+    "RABBITMQ_PASSWORD"
+].filter(key => !envKeys.includes(key));
+
+if (requiredKeys.length > 0) {
+    logger.error(`.env file is missing the following keys: ${requiredKeys.join(", ")}`);
+    process.exit(1);
+};
+
+//--[ FUNCTIONS ]---------------------------------------------------------------
+
+const xorEncryption = (text: string, key: string) => {
     let encryptedText = "";
 
     for (let i = 0; i < text.length; i++) {
@@ -44,7 +72,7 @@ function xorEncryption(text: string, key: string): string {
     return encryptedText;
 };
 
-async function sleep(timeout: number) {
+const sleep = async(timeout: number) => {
     return new Promise((resolve, _) => {
         setTimeout(() => {
             resolve(true);
@@ -52,11 +80,11 @@ async function sleep(timeout: number) {
     });
 };
 
-function random(min: number, max: number) {
+const random = (min: number, max: number) => {
     return Math.floor(Math.random() * (max - min) + min);
 };
 
-function replaceDomElement(text: string): string {
+const replaceDomElement = (text: string) => {
     const replaceWith = { " ": " ", "&nbsp;": " ", "&amp;": '&', "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#039;": "'"};
 
     Object.keys(replaceWith).map(key => {
@@ -67,30 +95,24 @@ function replaceDomElement(text: string): string {
     return text;
 }
 
-async function startBot(userId: number) {
-    if (!process.env.INSTALING_KEY)
-        return logger.error(`startBot(): Master key not set, killing`);
+//--[ BOT ]---------------------------------------------------------------------
 
-    logger.log(`startBot(): working ${userId}`);
+const pool = new Pool({
+    user:     env.DATABASE_USERNAME,
+    password: env.DATABASE_PASSWORD,
+    host:     env.DATABASE_HOST,
+    database: env.DATABASE_NAME
+});
 
+async function startBot(userId: number, context: BrowserContext): Promise<[number, Error[]]> {
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
-    let client;
-
-    try {
-        client = await pool.connect()
-    } catch(err) {
-        return logger.error(`startBot(): Cannot connect to database: ${(err as Error).message}`)
-    }
-
-    logger.log(`startBot(): bot connected to db for user ${userId}`);
-    
     let res;
 
     try {
-        res = await client.query("SELECT * FROM users INNER JOIN flags on users.userid = flags.userid INNER JOIN words on users.userid = words.userid WHERE users.userid = $1", [userId]);
+        res = await pool.query("SELECT * FROM users INNER JOIN flags on users.userid = flags.userid INNER JOIN words on users.userid = words.userid WHERE users.userid = $1", [userId]);
     } catch(err) {
-        return logger.error(`startBot(): Cannot query database: ${(err as Error).message}`);
+        return [1002, [err as Error]];
     }
 
     logger.log(`startBot(): SQL query executed for user ${userId}`);
@@ -98,40 +120,22 @@ async function startBot(userId: number) {
     const userData: DatabaseUserRes | undefined = res.rows[0];
 
     if (userData === undefined)
-        return logger.warn(`startBot(): User with id ${userId} doesn't exist or didn't scrape words yet`);
+        return [1000, []];
 
-    const password = xorEncryption(userData.instaling_pass, process.env.INSTALING_KEY);
+    const password = xorEncryption(userData.instaling_pass, env.INSTALING_KEY);
 
     // --[ LOGIN LOGIC ]--------------------------------------------------------
-
-    let browser: Browser;
-
-    try {
-        browser = await chromium.launch({
-            headless: true,
-            args: ["--mute-audio"]
-        });
-    } catch(err) {
-        return logger.error(`startBot(): Cannot spawn browser: ${(err as Error).message}`);
-    }
-
-    const context = await browser.newContext({
-        ...devices["Desktop Chrome"],
-    });
-
-    context.setDefaultTimeout(2000);
 
     const page = await context.newPage();
 
     try {
-        await page.goto("https://instaling.pl/teacher.php?page=login", { timeout: 60000 });
+        await page.goto("https://instaling.pl/teacher.php?page=login");
     } catch(err) {
-        return logger.error("Cannot enter instaling.pl");
+        await page.close();
+        return [1001, [err as Error]];
     }
 
     await page.waitForLoadState("domcontentloaded");
-
-    await sleep(random(300, 1000));
 
     await page.locator("xpath=/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/button[1]")
         .click()
@@ -140,23 +144,21 @@ async function startBot(userId: number) {
     await sleep(random(300, 1000));
 
     try {
-        await page.locator('//*[@id="log_email"]').pressSequentially(userData.instaling_user, { timeout: 20000, delay: random(250, 500) });
+        await page.locator('//*[@id="log_email"]').pressSequentially(userData.instaling_user, { delay: random(250, 500) });
         await sleep(random(500, 1000));
-        await page.locator('//*[@id="log_password"]').pressSequentially(password, { timeout: 20000, delay: random(230, 600) });
+        await page.locator('//*[@id="log_password"]').pressSequentially(password, { delay: random(230, 600) });
         await sleep(random(500, 1500));
         await page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click();
     } catch(err) {
-        await context.close();
-        await browser.close();
-        return logger.error(`startBot(): Cannot login: ${(err as Error).message}`);
+        await page.close();
+        return [1003, [err as Error]];
     }
 
     await page.waitForLoadState("domcontentloaded");
 
     if (!page.url().startsWith("https://instaling.pl/student/pages/mainPage.php")) {
-        await context.close();
-        await browser.close();
-        return logger.log(`startBot(): Invalid login credentials for session ${userId}`);
+        await page.close();
+        return [1004, []]
     }
 
     // --[ SESSION LOGIC ]------------------------------------------------------
@@ -174,13 +176,12 @@ async function startBot(userId: number) {
             .filter({ hasText: /Dokończ sesję|Zacznij codzienną sesję/ })
             .click()
             .catch(async err => {
-                await context.close();
-                await browser.close();
-                return logger.error(`startBot(): Backup student panel failed: ${(err as Error).message}`);
+                await page.close();
+                return err as Error;
             });
 
-        if (r === false)
-            return;
+        if (r)
+            return [1005, [r]];
     }
 
     await page.waitForLoadState("domcontentloaded");
@@ -195,12 +196,12 @@ async function startBot(userId: number) {
         const r = await page.locator('//*[@id="continue_session_button"]')
             .click()
             .catch(async err => {
-                await context.close();
-                await browser.close();
-                return logger.error(`startBot(): Cannot start session for user ${userId}: ${(err as Error).message}\n====SECOND====\n${(errP as Error).message}`);
+                await page.close();
+                return [err as Error, errP as Error];
             });
-        if (r === false)
-            return;
+
+        if (r)
+            return [1006, r];
     }
 
     await page.waitForLoadState("domcontentloaded");
@@ -241,17 +242,16 @@ async function startBot(userId: number) {
 
             const finishPage = await page.locator('//*[@id="finish_page"]').isVisible();
             if (finishPage) {
-                logger.log(`startBot(): Finished session ${userId}`);
-                break;
+                return [1, []];
             }
         } catch(err) {
             logger.error(`startBot(): Cannot handle "Czy znasz już to słówko?": ${(err as Error).message}`)
         }
 
         let word = await page.locator('//*[@id="question"]/div[2]/div[2]').innerHTML();
-        
+
         word = replaceDomElement(word.trim());
-        
+
         let translation = truthTable[word.trim()];
 
         if (typeof(translation) == "object")
@@ -265,9 +265,9 @@ async function startBot(userId: number) {
 
             let newTranslation = await page.locator('xpath=/html/body/div/div[9]/div[1]/div[2]').innerHTML();
             newTranslation = replaceDomElement(newTranslation.trim());
-            logger.log(`Found word outside of list: "${newTranslation}"`);
+            logger.log(`startBot(): Found word outside of list: "${newTranslation}"`);
             truthTable[word.trim()] = newTranslation.trim();
-    
+
             try {
                 await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
             } catch(err) {
@@ -275,17 +275,16 @@ async function startBot(userId: number) {
                 break;
             }
 
-            continue;            
+            continue;
         }
-
-        logger.log(`startBot(): '${word.trim()}' - '${translation}' (${userId})`);
 
         if (!translation) {
             iterations++;
             if (iterations >= 5) {
+                logger.warn(`startBot(): Couldn't find translation for "${word}" for session ${userId}`);
                 break;
             }
-            continue;            
+            continue;
         }
 
         try {
@@ -308,18 +307,102 @@ async function startBot(userId: number) {
         }
     }
 
-    await context.close();
-    await browser.close();
+    await page.close();
+
+    return [1009, []];
 }
 
-for(let i = 8; i <= 13; i++) {
-   startBot(i);
+async function worker() {
+    let browser: Browser;
+
+    try {
+        browser = await chromium.launch({
+            headless: true,
+            args: ["--mute-audio"]
+        });
+    } catch(err) {
+        return logger.error(`worker(): Cannot spawn browser: ${(err as Error).message}`);
+    }
+
+    if (!browser) {
+        return logger.error("worker(): Cannot spawn main browser");
+    }
+
+    try {
+        const connection = await amqp.connect(`amqp://${env.RABBITMQ_USERNAME}:${env.RABBITMQ_PASSWORD}@${env.RABBITMQ_HOST}`);
+        const channel = await connection.createChannel();
+
+        const queue = "botqueue";
+        const correlationId = generateUuid();
+
+        channel.assertQueue(queue, { exclusive: true });
+
+        channel.prefetch(1);
+        logger.log(`worker(): Waiting for tasks on channel ${queue}`);
+
+        channel.consume(queue, async msg => {
+            if (msg == null) return logger.warn("Received null message");
+            if (msg.properties.correlationId == correlationId) {
+
+                const msgContent = msg.content.toString();
+                const userId = parseInt(msgContent);
+
+                logger.log(`worker(): Received a task, starting bot for user ${userId}`);
+
+                const context = await browser.newContext({
+                    ...devices["Desktop Chrome"],
+                });
+
+                context.setDefaultTimeout(60000);
+
+                const [res, err] = await startBot(userId, context);
+
+                context.close();
+
+                switch (res) {
+                    case 1:
+                        logger.log(`worker(): Finished bot for user ${userId}`);
+                        break;
+                    case 1000:
+                        logger.warn(`worker(): User with id ${userId} doesn't exist or didn't scrape words yet`);
+                        break;
+                    case 1001:
+                        logger.error(`worker(): Cannot enter instaling.pl for user ${userId} due to: ${(err[0] as Error).message}`);
+                        break;
+                    case 1002:
+                        logger.error(`worker(): Cannot query database for user ${userId} due to: ${(err[0] as Error).message}`)
+                        break;
+                    case 1003:
+                        logger.error(`worker(): Cannot login for user ${userId} due to: ${(err[0] as Error).message}`);
+                        break;
+                    case 1004:
+                        logger.error(`worker(): Invalid login credentials for user ${userId}`);
+                        break;
+                    case 1005:
+                        logger.error(`worker(): Primary and backup student panel methods failed for user: ${userId}, due to: ${(err[0] as Error).message}`);
+                        break;
+                    case 1006:
+                        logger.error(`worker(): Cannot start session for user ${userId}: ${(err[0] as Error).message}\n====SECOND====\n${(err[1] as Error).message}`);
+                        break;
+                    default:
+                        logger.error(`worker(): Unknown error for user ${userId}`);
+                        break;
+                    }
+                
+                    channel.sendToQueue(queue, Buffer.from(res.toString()),{
+                        correlationId: correlationId,
+                        replyTo: queue });
+                
+                }
+                    
+                    channel.ack(msg);
+                    
+        });
+
+
+    } catch (error) {
+        logger.error("worker(): Global error: ", error);
+    }
 }
 
-
-//startBot(13);
-
-//startBot(8);
-//startBot(10);
-
-//startBot(5)
+worker();
