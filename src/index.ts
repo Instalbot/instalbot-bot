@@ -312,12 +312,12 @@ async function startBot(userId: number) {
     await browser.close();
 }
 
-//for(let i = 7; i <= 13; i++) {
-//   startBot(i);
-//}
+for(let i = 8; i <= 13; i++) {
+   startBot(i);
+}
 
 
-startBot(13);
+//startBot(13);
 
 //startBot(8);
 //startBot(10);
