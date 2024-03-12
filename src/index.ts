@@ -4,6 +4,7 @@ import amqp from "amqplib";
 import dotenv from "dotenv";
 
 import logger from "./logger";
+import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
@@ -331,74 +332,67 @@ async function worker() {
     try {
         const connection = await amqp.connect(`amqp://${env.RABBITMQ_USERNAME}:${env.RABBITMQ_PASSWORD}@${env.RABBITMQ_HOST}`);
         const channel = await connection.createChannel();
-
+        
         const queue = "botqueue";
-        const correlationId = generateUuid();
-
-        channel.assertQueue(queue, { exclusive: true });
+        channel.assertQueue(queue, { exclusive: true, durable: true });
 
         channel.prefetch(1);
         logger.log(`worker(): Waiting for tasks on channel ${queue}`);
 
         channel.consume(queue, async msg => {
             if (msg == null) return logger.warn("Received null message");
-            if (msg.properties.correlationId == correlationId) {
+        
+            const msgContent = msg.content.toString();
+            const userId = parseInt(msgContent);
+        
+            logger.log(`worker(): Received a task, starting bot for user ${userId}`);
+        
+            const context = await browser.newContext({
+                ...devices["Desktop Chrome"],
+            });
+        
+            context.setDefaultTimeout(60000);
+        
+            const [res, err] = await startBot(userId, context);
+        
+            context.close();
 
-                const msgContent = msg.content.toString();
-                const userId = parseInt(msgContent);
+            switch (res) {
+                case 1:
+                    logger.log(`worker(): Finished bot for user ${userId}`);
+                    break;
+                case 1000:
+                    logger.warn(`worker(): User with id ${userId} doesn't exist or didn't scrape words yet`);
+                    break;
+                case 1001:
+                    logger.error(`worker(): Cannot enter instaling.pl for user ${userId} due to: ${(err[0] as Error).message}`);
+                    break;
+                case 1002:
+                    logger.error(`worker(): Cannot query database for user ${userId} due to: ${(err[0] as Error).message}`);
+                    break;
+                case 1003:
+                    logger.error(`worker(): Cannot login for user ${userId} due to: ${(err[0] as Error).message}`);
+                    break;
+                case 1004:
+                    logger.error(`worker(): Invalid login credentials for user ${userId}`);
+                    break;
+                case 1005:
+                    logger.error(`worker(): Primary and backup student panel methods failed for user: ${userId}, due to: ${(err[0] as Error).message}`);
+                    break;
+                case 1006:
+                    logger.error(`worker(): Cannot start session for user ${userId}: ${(err[0] as Error).message}\n====SECOND====\n${(err[1] as Error).message}`);
+                    break;
+                default:
+                    logger.error(`worker(): Unknown error for user ${userId}`);
+                    break;
+            }
+            
+            channel.sendToQueue(msg.properties.replyTo, Buffer.from(res.toString()),{
+                correlationId: msg.properties.correlationId
+            });
 
-                logger.log(`worker(): Received a task, starting bot for user ${userId}`);
-
-                const context = await browser.newContext({
-                    ...devices["Desktop Chrome"],
-                });
-
-                context.setDefaultTimeout(60000);
-
-                const [res, err] = await startBot(userId, context);
-
-                context.close();
-
-                switch (res) {
-                    case 1:
-                        logger.log(`worker(): Finished bot for user ${userId}`);
-                        break;
-                    case 1000:
-                        logger.warn(`worker(): User with id ${userId} doesn't exist or didn't scrape words yet`);
-                        break;
-                    case 1001:
-                        logger.error(`worker(): Cannot enter instaling.pl for user ${userId} due to: ${(err[0] as Error).message}`);
-                        break;
-                    case 1002:
-                        logger.error(`worker(): Cannot query database for user ${userId} due to: ${(err[0] as Error).message}`)
-                        break;
-                    case 1003:
-                        logger.error(`worker(): Cannot login for user ${userId} due to: ${(err[0] as Error).message}`);
-                        break;
-                    case 1004:
-                        logger.error(`worker(): Invalid login credentials for user ${userId}`);
-                        break;
-                    case 1005:
-                        logger.error(`worker(): Primary and backup student panel methods failed for user: ${userId}, due to: ${(err[0] as Error).message}`);
-                        break;
-                    case 1006:
-                        logger.error(`worker(): Cannot start session for user ${userId}: ${(err[0] as Error).message}\n====SECOND====\n${(err[1] as Error).message}`);
-                        break;
-                    default:
-                        logger.error(`worker(): Unknown error for user ${userId}`);
-                        break;
-                    }
-                
-                    channel.sendToQueue(queue, Buffer.from(res.toString()),{
-                        correlationId: correlationId,
-                        replyTo: queue });
-                
-                }
-                    
-                    channel.ack(msg);
-                    
+            channel.ack(msg);
         });
-
 
     } catch (error) {
         logger.error("worker(): Global error: ", error);
