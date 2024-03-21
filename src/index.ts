@@ -333,7 +333,7 @@ async function worker() {
         const channel = await connection.createChannel();
         
         const queue = "botqueue";
-        channel.assertQueue(queue, { exclusive: true, durable: true });
+        channel.assertQueue(queue, { durable: true });
 
         channel.prefetch(1);
         logger.log(`worker(): Waiting for tasks on channel ${queue}`);
