@@ -4,7 +4,6 @@ import amqp from "amqplib";
 import dotenv from "dotenv";
 
 import logger from "./logger";
-import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
