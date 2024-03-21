@@ -335,7 +335,7 @@ async function worker() {
         const queue = "botqueue";
         channel.assertQueue(queue, { durable: true });
 
-        channel.prefetch(1);
+        channel.prefetch(2);
         logger.log(`worker(): Waiting for tasks on channel ${queue}`);
 
         channel.consume(queue, async msg => {
