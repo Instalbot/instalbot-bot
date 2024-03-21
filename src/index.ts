@@ -346,6 +346,8 @@ async function worker() {
         
             logger.log(`worker(): Received a task, starting bot for user ${userId}`);
         
+            channel.ack(msg);
+
             const context = await browser.newContext({
                 ...devices["Desktop Chrome"],
             });
