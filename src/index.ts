@@ -391,8 +391,6 @@ async function worker() {
             /*channel.sendToQueue(msg.properties.replyTo, Buffer.from(res.toString()),{
                 correlationId: msg.properties.correlationId
             });*/
-
-            channel.ack(msg);
         });
 
     } catch (error) {
