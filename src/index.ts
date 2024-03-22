@@ -388,9 +388,9 @@ async function worker() {
                     break;
             }
             
-            channel.sendToQueue(msg.properties.replyTo, Buffer.from(res.toString()),{
+            /*channel.sendToQueue(msg.properties.replyTo, Buffer.from(res.toString()),{
                 correlationId: msg.properties.correlationId
-            });
+            });*/
 
             channel.ack(msg);
         });
