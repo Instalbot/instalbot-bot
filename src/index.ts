@@ -373,16 +373,14 @@ async function worker() {
         
             logger.log(`worker(): Received a task, starting bot for user ${userId}`);
         
-            channel.ack(msg);
-
             const context = await browser.newContext({
                 ...devices["Desktop Chrome"],
             });
-        
+            
             context.setDefaultTimeout(60000);
-        
+            
             const [res, err] = await startBot(userId, context);
-        
+            
             context.close();
 
             switch (res) {
@@ -418,6 +416,8 @@ async function worker() {
             /*channel.sendToQueue(msg.properties.replyTo, Buffer.from(res.toString()),{
                 correlationId: msg.properties.correlationId
             });*/
+
+            channel.ack(msg);
         });
 
     } catch (error) {
