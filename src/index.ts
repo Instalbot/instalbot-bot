@@ -7,7 +7,7 @@ import logger from "./logger";
 
 dotenv.config();
 
-//--[ TYPES ]-------------------------------------------------------------------
+//--[ types ]-------------------------------------------------------------------
 
 export interface DatabaseUserRes {
     userid:         number;
@@ -300,7 +300,34 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
         await page.waitForLoadState("domcontentloaded");
 
         try {
-            await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
+	    const statusElement = await page.locator('//*[@id="answer_result"]/div');
+	    const status = replaceDomElement(await statusElement.innerHTML()).trim();
+	    console.log(status);
+            if (status == "Niepoprawnie") {
+    	    	let newTranslation = await page.locator('xpath=/html/body/div/div[9]/div[1]/div[2]').innerHTML();
+            	newTranslation = replaceDomElement(newTranslation.trim());
+            	logger.log(`startBot(): Found word outside of list: "${newTranslation}"`);
+            	
+		const pointer = truthTable[word.trim()];
+	
+		if (pointer){
+			if (typeof(pointer) == "object")
+				// @ts-ignore
+				truthTable[word.trim()].push(newTranslation.trim());
+			else if (typeof(pointer) == "string")
+				truthTable[word.trim()] = [pointer, newTranslation.trim()];
+		} else truthTable[word.trim()] = newTranslation.trim();
+
+           	try {
+                	await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
+            	} catch(err) {
+                	logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
+                	break;
+           	}
+
+            	continue;
+	    }
+	    await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
         } catch(err) {
             logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
             break;
