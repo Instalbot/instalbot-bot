@@ -1,34 +1,30 @@
 import { devices, chromium, Browser, BrowserContext } from "playwright";
 import { Pool } from "pg";
 import amqp from "amqplib";
-import dotenv from "dotenv";
 
 import logger from "./logger";
 
-dotenv.config();
-
 //--[ types ]-------------------------------------------------------------------
 
-export interface DatabaseUserRes {
-    userid:         number;
-    email:          string;
-    username:       string;
-    password:       string;
-    created:        Date;
-    list:           List[];
-    todo:           boolean;
-    hoursrange:     `[${number}, ${number}]`;
+export interface IWord {
+    userid: number;
+    flagid: number;
+    list: { key: string, value: string }[];
+}
+
+export interface IFlag {
+    flagid: number;
+    userid: number;
+    todo: boolean;
     instaling_user: string;
     instaling_pass: string;
-    error_level:    number;
-};
-
-export interface List {
-    key:   string;
-    value: string;
-};
+    error_level: number;
+    hoursrange: `[${number}, ${number}]`
+}
 
 //--[ ENV ]---------------------------------------------------------------------
+
+import "dotenv/config";
 
 const env = process.env as {
     DATABASE_USERNAME: string,
@@ -104,20 +100,20 @@ const pool = new Pool({
     database: env.DATABASE_NAME
 });
 
-async function startBot(userId: number, context: BrowserContext): Promise<[number, Error[]]> {
+async function startBot(flagid: number, context: BrowserContext): Promise<[number, Error[]]> {
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
     let res;
 
     try {
-        res = await pool.query("SELECT * FROM users INNER JOIN flags on users.userid = flags.userid INNER JOIN words on users.userid = words.userid WHERE users.userid = $1", [userId]);
+        res = await pool.query("SELECT * FROM flags INNER JOIN words on flags.flagid = words.userid WHERE flags.flagsid = $1", [flagid]);
     } catch(err) {
         return [1002, [err as Error]];
     }
 
-    logger.log(`startBot(): SQL query executed for user ${userId}`);
+    logger.log(`startBot(): SQL query executed for user ${flagid}`);
 
-    const userData: DatabaseUserRes | undefined = res.rows[0];
+    const userData: IFlag & IWord = res.rows[0];
 
     if (userData === undefined)
         return [1000, []];
@@ -139,7 +135,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
 
     await page.locator("xpath=/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/button[1]")
         .click()
-        .catch(() => logger.warn(`startBot(): Cannot find cookie button for session ${userId}`));
+        .catch(() => logger.warn(`startBot(): Cannot find cookie button for session ${flagid}`));
 
     await sleep(random(300, 1000));
 
@@ -163,7 +159,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
 
     // --[ SESSION LOGIC ]------------------------------------------------------
 
-    logger.log(`startBot(): Logged in as ${userData.instaling_user} (${userId})`);
+    logger.log(`startBot(): Logged in as ${userData.instaling_user} (${flagid})`);
 
     await sleep(random(600, 1200));
 
@@ -188,7 +184,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
 
     await sleep(random(500, 2000));
 
-    logger.log(`startBot(): Started session for user ${userData.instaling_user} (${userId})`);
+    logger.log(`startBot(): Started session for user ${userData.instaling_user} (${flagid})`);
 
     try {
         await page.locator('//*[@id="start_session_button"]').click();
@@ -271,7 +267,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
             try {
                 await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
             } catch(err) {
-                logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
+                logger.error(`startBot(): Cannot press "next_word" for session ${flagid}`);
                 break;
             }
 
@@ -281,7 +277,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
         if (!translation) {
             iterations++;
             if (iterations >= 5) {
-                logger.warn(`startBot(): Couldn't find translation for "${word}" for session ${userId}`);
+                logger.warn(`startBot(): Couldn't find translation for "${word}" for session ${flagid}`);
                 break;
             }
             continue;
@@ -292,7 +288,7 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
             await sleep(random(500, 1000));
             await page.locator('//*[@id="check"]').click();
         } catch(err) {
-            logger.error(`startBot(): Couldn't fill or skip word "${translation} (${word})" for session ${userId}`);
+            logger.error(`startBot(): Couldn't fill or skip word "${translation} (${word})" for session ${flagid}`);
             continue;
         }
 
@@ -300,36 +296,37 @@ async function startBot(userId: number, context: BrowserContext): Promise<[numbe
         await page.waitForLoadState("domcontentloaded");
 
         try {
-	    const statusElement = await page.locator('//*[@id="answer_result"]/div');
-	    const status = replaceDomElement(await statusElement.innerHTML()).trim();
-	    console.log(status);
+            const statusElement = await page.locator('//*[@id="answer_result"]/div');
+            const status = replaceDomElement(await statusElement.innerHTML()).trim();
+
             if (status == "Niepoprawnie") {
-    	    	let newTranslation = await page.locator('xpath=/html/body/div/div[9]/div[1]/div[2]').innerHTML();
-            	newTranslation = replaceDomElement(newTranslation.trim());
-            	logger.log(`startBot(): Found word outside of list: "${newTranslation}"`);
-            	
-		const pointer = truthTable[word.trim()];
-	
-		if (pointer){
-			if (typeof(pointer) == "object")
-				// @ts-ignore
-				truthTable[word.trim()].push(newTranslation.trim());
-			else if (typeof(pointer) == "string")
-				truthTable[word.trim()] = [pointer, newTranslation.trim()];
-		} else truthTable[word.trim()] = newTranslation.trim();
+                let newTranslation = await page.locator('xpath=/html/body/div/div[9]/div[1]/div[2]').innerHTML();
+                newTranslation = replaceDomElement(newTranslation.trim());
+                logger.log(`startBot(): Found word outside of list: "${newTranslation}"`);
 
-           	try {
-                	await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
-            	} catch(err) {
-                	logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
-                	break;
-           	}
+                const pointer = truthTable[word.trim()];
 
-            	continue;
-	    }
-	    await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
+                if (pointer){
+                    if (typeof(pointer) == "object")
+                        // @ts-ignore
+                        truthTable[word.trim()].push(newTranslation.trim());
+                    else if (typeof(pointer) == "string")
+                        truthTable[word.trim()] = [pointer, newTranslation.trim()];
+                } else truthTable[word.trim()] = newTranslation.trim();
+
+                try {
+                        await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
+                    } catch(err) {
+                        logger.error(`startBot(): Cannot press "next_word" for session ${flagid}`);
+                        break;
+                }
+
+                continue;
+            }
+
+            await page.locator('//*[@id="next_word"]', { hasText: "Następne" }).click();
         } catch(err) {
-            logger.error(`startBot(): Cannot press "next_word" for session ${userId}`);
+            logger.error(`startBot(): Cannot press "next_word" for session ${flagid}`);
             break;
         }
     }
