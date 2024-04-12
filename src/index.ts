@@ -358,7 +358,7 @@ async function worker() {
     try {
         const connection = await amqp.connect(`amqp://${env.RABBITMQ_USERNAME}:${env.RABBITMQ_PASSWORD}@${env.RABBITMQ_HOST}`);
         const channel = await connection.createChannel();
-        
+
         const queue = "botqueue";
         channel.assertQueue(queue, { durable: true });
 
