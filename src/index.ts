@@ -65,7 +65,7 @@ const xorEncryption = (text: string, key: string) => {
         );
     }
 
-    return encryptedText;
+    return text;
 };
 
 const sleep = async(timeout: number) => {
@@ -106,7 +106,7 @@ async function startBot(flagid: number, context: BrowserContext): Promise<[numbe
     let res;
 
     try {
-        res = await pool.query("SELECT * FROM flags INNER JOIN words on flags.flagid = words.userid WHERE flags.flagsid = $1", [flagid]);
+        res = await pool.query("SELECT * FROM flags INNER JOIN words on flags.flagid = words.userid WHERE flags.flagid = $1", [flagid]);
     } catch(err) {
         return [1002, [err as Error]];
     }
