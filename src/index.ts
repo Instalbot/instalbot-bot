@@ -106,7 +106,7 @@ async function startBot(flagid: number, context: BrowserContext): Promise<[numbe
     let res;
 
     try {
-        res = await pool.query("SELECT * FROM flags INNER JOIN words on flags.flagid = words.userid WHERE flags.flagid = $1", [flagid]);
+        res = await pool.query("SELECT * FROM flags INNER JOIN words on flags.flagid = words.flagid WHERE flags.flagid = $1", [flagid]);
     } catch(err) {
         return [1002, [err as Error]];
     }
